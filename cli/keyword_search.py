@@ -9,6 +9,7 @@ from search_utils import (
     CACHE_DIR,
     DEFAULT_SEARCH_LIMIT,
     BM25_K1,
+    BM25_B,
     load_movies,
     load_stopwords,
 )
@@ -20,9 +21,11 @@ class InvertedIndex:
         self.index = defaultdict(set)
         self.docmap: dict[int, dict] = {}
         self.term_frequencies: dict[int, Counter] = defaultdict(Counter)
+        self.doc_lengths: dict[int, int] = {}
         self.index_path = os.path.join(CACHE_DIR, "index.pkl")
         self.docmap_path = os.path.join(CACHE_DIR, "docmap.pkl")
         self.term_frequencies_path = os.path.join(CACHE_DIR, "term_frequencies.pkl")
+        self.doc_lengths_path = os.path.join(CACHE_DIR, "doc_lengths.pkl")
 
     def build(self) -> None:
         movies = load_movies()
@@ -40,6 +43,8 @@ class InvertedIndex:
             pickle.dump(self.docmap, f)
         with open(self.term_frequencies_path, "wb") as f:
             pickle.dump(self.term_frequencies, f)
+        with open(self.doc_lengths_path, "wb") as f:
+            pickle.dump(self.doc_lengths, f)
 
     def load(self) -> None:
         with open(self.index_path, "rb") as f:
@@ -48,6 +53,8 @@ class InvertedIndex:
             self.docmap = pickle.load(f)
         with open(self.term_frequencies_path, "rb") as f:
             self.term_frequencies = pickle.load(f)
+        with open(self.doc_lengths_path, "rb") as f:
+            self.doc_lengths = pickle.load(f)
 
     def get_documents(self, term: str) -> list[int]:
         doc_ids = self.index.get(term, set())
@@ -58,6 +65,7 @@ class InvertedIndex:
         for token in tokens:
             self.term_frequencies[doc_id][token] += 1
             self.index[token].add(doc_id)
+        self.doc_lengths[doc_id] = len(tokens)
 
     def get_tf(self, doc_id: int, term: str) -> int:
         tokens = tokenize_text(term)
@@ -83,15 +91,22 @@ class InvertedIndex:
         bm25idf =  math.log((total_docs - doc_freq + 0.5) / (doc_freq + 0.5) + 1)
         return bm25idf
 
-    def get_bm25_tf(self, doc_id, term, k1=BM25_K1):
+    def get_bm25_tf(self, doc_id, term, k1=BM25_K1, b=BM25_B):
         tf = self.get_tf(doc_id, term)
-        return (tf * (k1 + 1)) / (tf + k1)
+        return (tf * (k1 + 1)) / (tf + k1 * ((1 - b) + b * (self.doc_lengths[doc_id] / self.__get_avg_doc_length())))
 
-def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1) -> float:
+    def __get_avg_doc_length(self) -> float:
+        if not self.doc_lengths:
+            return 0
+        return sum(self.doc_lengths.values()) / len(self.doc_lengths)
+
+    
+
+def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B) -> float:
     idx = InvertedIndex()
     idx.load()
     try:
-        tf = idx.get_bm25_tf(doc_id, term, k1)
+        tf = idx.get_bm25_tf(doc_id, term, k1, b)
         return tf
     except ValueError as e:
         print(f"Error: {e}")

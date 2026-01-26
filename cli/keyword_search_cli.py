@@ -3,8 +3,7 @@ import sys
 import argparse
 
 from keyword_search import *
-from search_utils import BM25_K1
-
+from search_utils import BM25_K1, BM25_B
 
 
 def main() -> None:
@@ -28,6 +27,7 @@ def main() -> None:
     bm25tf_parser.add_argument("doc_id", type=int, help="Document ID")
     bm25tf_parser.add_argument("term", type=str, help="Term")
     bm25tf_parser.add_argument("k1", type=float, nargs="?", default=BM25_K1, help="Tunable BM25 K1 parameter")
+    bm25tf_parser.add_argument("b", type=float, nargs="?", default=BM25_B, help="Tunable BM25 B parameter")
 
     args = parser.parse_args()
 

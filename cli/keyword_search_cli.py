@@ -3,6 +3,8 @@ import sys
 import argparse
 
 from keyword_search import *
+from search_utils import BM25_K1
+
 
 
 def main() -> None:
@@ -22,6 +24,10 @@ def main() -> None:
     tfidf_parser.add_argument("term", type=str, help="Term")
     bm25idf_parser = subparsers.add_parser("bm25idf", help="Get BM25 IDF for a term")
     bm25idf_parser.add_argument("term", type=str, help="Term")
+    bm25tf_parser = subparsers.add_parser("bm25tf", help="Get BM25 TF for a document and term")
+    bm25tf_parser.add_argument("doc_id", type=int, help="Document ID")
+    bm25tf_parser.add_argument("term", type=str, help="Term")
+    bm25tf_parser.add_argument("k1", type=float, nargs="?", default=BM25_K1, help="Tunable BM25 K1 parameter")
 
     args = parser.parse_args()
 
@@ -53,6 +59,12 @@ def main() -> None:
             term = args.term
             bm25idf = bm25idf_command(term)
             print(f"BM25 IDF score of '{term}': {bm25idf:.2f}")
+        case "bm25tf":
+            doc_id = args.doc_id
+            term = args.term
+            k1 = args.k1
+            bm25tf = bm25_tf_command(doc_id, term, k1)
+            print(f"BM25 TF score of '{term}' in document '{doc_id}': {bm25tf:.2f}")
         case _:
             parser.print_help()
 

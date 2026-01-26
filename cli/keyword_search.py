@@ -8,9 +8,11 @@ import math
 from search_utils import (
     CACHE_DIR,
     DEFAULT_SEARCH_LIMIT,
+    BM25_K1,
     load_movies,
     load_stopwords,
 )
+
 
 
 class InvertedIndex:
@@ -80,6 +82,19 @@ class InvertedIndex:
         doc_freq = len(self.get_documents(token))
         bm25idf =  math.log((total_docs - doc_freq + 0.5) / (doc_freq + 0.5) + 1)
         return bm25idf
+
+    def get_bm25_tf(self, doc_id, term, k1=BM25_K1):
+        tf = self.get_tf(doc_id, term)
+        return (tf * (k1 + 1)) / (tf + k1)
+
+def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1) -> float:
+    idx = InvertedIndex()
+    idx.load()
+    try:
+        tf = idx.get_bm25_tf(doc_id, term, k1)
+        return tf
+    except ValueError as e:
+        print(f"Error: {e}")
 
 
 def bm25idf_command(term: str) -> float:

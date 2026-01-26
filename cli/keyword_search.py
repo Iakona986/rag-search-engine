@@ -81,6 +81,7 @@ class InvertedIndex:
         token = tokens[0]
         idf =  math.log(len(self.docmap) / (1 + len(self.get_documents(token))))
         return idf
+
     def get_bm25_idf(self, term: str) -> float:
         tokens = tokenize_text(term)
         if len(tokens) != 1:
@@ -99,8 +100,42 @@ class InvertedIndex:
         if not self.doc_lengths:
             return 0
         return sum(self.doc_lengths.values()) / len(self.doc_lengths)
+    
+    def bm25(self, doc_id, term):
+        tf = self.get_bm25_tf(doc_id, term)
+        idf = self.get_bm25_idf(term)
+        return tf * idf
+
+    def bm25_search(self, query, limit):
+        query_tokens = tokenize_text(query)
+        doc_scores = defaultdict(float)    
+        for query_token in query_tokens:
+            idf = self.get_bm25_idf(query_token)
+            matching_doc_ids = self.get_documents(query_token)
+            for doc_id in matching_doc_ids:
+                tf_bm25 = self.get_bm25_tf(doc_id, query_token)
+                doc_scores[doc_id] += (idf * tf_bm25)
+            
+        results = list(doc_scores.items())
+        results.sort(key=lambda x: (-x[1], x[0]))
+    
+        return results[:limit]
 
     
+def bm25_search_command(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict]:
+    idx = InvertedIndex()
+    idx.load()
+    try:
+        results = idx.bm25_search(query, limit)
+        # Transform results from (doc_id, score) tuples to dicts with title and score
+        formatted_results = []
+        for doc_id, score in results:
+            doc = idx.docmap.get(doc_id, {"title": "Unknown Document"})
+            formatted_results.append({"id": doc_id, "title": doc["title"], "score": score})
+        return formatted_results
+    except ValueError as e: 
+        print(f"Error: {e}")
+        return []
 
 def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B) -> float:
     idx = InvertedIndex()

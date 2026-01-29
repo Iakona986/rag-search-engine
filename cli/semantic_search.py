@@ -17,7 +17,7 @@ class SemanticSearch:
                 raise ValueError("List must not be empty")
             if any(not isinstance(t, str) or t.strip() == "" for t in text):
                 raise ValueError("List must contain only non-empty strings")
-            return self.model.encode(text, show_progress_bar=True)
+            return self.model.encode(text, show_progress_bar=False)
         else:
             if not isinstance(text, str) or text.strip() == "":
                 raise ValueError("Text must not be empty")
@@ -29,7 +29,7 @@ class SemanticSearch:
         self.document_map = {doc['id']: doc for doc in documents}
         movie_strings = [f"{doc['title']}: {doc['description']}" for doc in documents]
         print("Generating embeddings...")
-        self.embeddings = self.model.encode(movie_strings, show_progress_bar=True)
+        self.embeddings = self.model.encode(movie_strings, show_progress_bar=False)
         os.makedirs('cache', exist_ok=True)
         np.save('cache/embeddings.npy', self.embeddings)
         return self.embeddings
@@ -43,6 +43,13 @@ class SemanticSearch:
             if len(self.embeddings) == len(documents):
                 return self.embeddings
         return self.build_embeddings(documents)
+
+def embed_query_text(query):
+    search_instance = SemanticSearch()
+    embedding = search_instance.generate_embedding(query)
+    print(f"Query: {query}")
+    print(f"First 5 dimensions: {embedding[:5]}")
+    print(f"Shape: {embedding.shape}")
 
 def verify_embeddings():
     search_instance = SemanticSearch()

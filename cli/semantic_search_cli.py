@@ -10,6 +10,7 @@ def main():
     subparsers.add_parser("verify", help="Verify that the embedding model is loaded")
     embed_parser = subparsers.add_parser("embed_text", help="Embed a text")
     embed_parser.add_argument("text", type=str, help="Text to embed")
+    verify_embeddings_parser = subparsers.add_parser("verify_embeddings", help="Verify that the embeddings are loaded")
     args = parser.parse_args()
 
     match args.command:
@@ -17,6 +18,8 @@ def main():
             verify_model()
         case "embed_text":
             embed_text(args.text)
+        case "verify_embeddings":
+            verify_embeddings()
         case _:
             parser.print_help()
 

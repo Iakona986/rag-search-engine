@@ -13,6 +13,9 @@ def main():
     verify_embeddings_parser = subparsers.add_parser("verify_embeddings", help="Verify that the embeddings are loaded")
     embedquery_parser = subparsers.add_parser("embedquery", help="Embed a query")
     embedquery_parser.add_argument("query", type=str, help="Query to embed")
+    search_parser = subparsers.add_parser("search", help="Search for a query")
+    search_parser.add_argument("query", type=str, help="Query to search for")
+    search_parser.add_argument("--limit", type=int, default=5, help="Number of results to return")
     args = parser.parse_args()
 
     match args.command:
@@ -24,6 +27,8 @@ def main():
             embed_query_text(args.query)
         case "verify_embeddings":
             verify_embeddings()
+        case "search":
+            search(args.query, args.limit)
         case _:
             parser.print_help()
 

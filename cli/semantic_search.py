@@ -62,6 +62,13 @@ class SemanticSearch:
             })
         return top_results
 
+def chunk(text, chunk_size, overlap):
+    words = text.split()
+    chunks = [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size - overlap)]
+    print(f"Chunking {len(text)} characters")
+    for i, chunk in enumerate(chunks, 1):
+        print(f"{i}. {chunk}")
+
 def search(query, limit):
     search_instance = SemanticSearch()
     with open('data/movies.json', 'r') as f:

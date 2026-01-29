@@ -16,6 +16,10 @@ def main():
     search_parser = subparsers.add_parser("search", help="Search for a query")
     search_parser.add_argument("query", type=str, help="Query to search for")
     search_parser.add_argument("--limit", type=int, default=5, help="Number of results to return")
+    chunk_parser = subparsers.add_parser("chunk", help="Chunk a text")
+    chunk_parser.add_argument("text", type=str, help="Text to chunk")
+    chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size of each chunk")
+    chunk_parser.add_argument("--overlap", type=int, default=20, help="Number of words to overlap between chunks")
     args = parser.parse_args()
 
     match args.command:
@@ -29,6 +33,8 @@ def main():
             verify_embeddings()
         case "search":
             search(args.query, args.limit)
+        case "chunk":
+            chunk(args.text, args.chunk_size, args.overlap)
         case _:
             parser.print_help()
 

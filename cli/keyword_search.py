@@ -115,11 +115,17 @@ class InvertedIndex:
             for doc_id in matching_doc_ids:
                 tf_bm25 = self.get_bm25_tf(doc_id, query_token)
                 doc_scores[doc_id] += (idf * tf_bm25)
-            
-        results = list(doc_scores.items())
-        results.sort(key=lambda x: (-x[1], x[0]))
-    
-        return results[:limit]
+        sorted_items = sorted(doc_scores.items(), key=lambda x: (-x[1], x[0])) 
+        results = []
+        for doc_id, score in sorted_items[:limit]:
+            doc = self.docmap[doc_id]
+            results.append({
+                'id': doc['id'],
+                'score': score,
+                'title': doc['title'],
+                'document': doc['description'],
+            })
+        return results
 
     
 def bm25_search_command(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict]:

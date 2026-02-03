@@ -20,6 +20,14 @@ def main():
     chunk_parser.add_argument("text", type=str, help="Text to chunk")
     chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size of each chunk")
     chunk_parser.add_argument("--overlap", type=int, default=20, help="Number of words to overlap between chunks")
+    semantic_chunk_parser = subparsers.add_parser("semantic_chunk", help="Chunk a text semantically")
+    semantic_chunk_parser.add_argument("text", type=str, help="Text to chunk")
+    semantic_chunk_parser.add_argument("--max-chunk-size", type=int, default=4, help="Size of each chunk")
+    semantic_chunk_parser.add_argument("--overlap", type=int, default=0, help="Number of words to overlap between chunks")
+    embed_chunks_parser = subparsers.add_parser("embed_chunks", help="Embed the chunks")
+    search_chunked_parser = subparsers.add_parser("search_chunked", help="Search for a query in the chunks")
+    search_chunked_parser.add_argument("query", type=str, help="Query to search for")
+    search_chunked_parser.add_argument("--limit", type=int, default=5, help="Number of results to return")
     args = parser.parse_args()
 
     match args.command:
@@ -35,7 +43,13 @@ def main():
             search(args.query, args.limit)
         case "chunk":
             chunk(args.text, args.chunk_size, args.overlap)
-        case _:
+        case "semantic_chunk":
+            semantic_chunk(args.text, args.max_chunk_size, args.overlap)
+        case "embed_chunks":
+            embed_chunks()
+        case "search_chunked":
+            search_chunked(args.query, args.limit)
+        case _: 
             parser.print_help()
 
 if __name__ == "__main__":

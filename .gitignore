@@ -9,5 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
+# Data and cache
 /data/
 /cache/

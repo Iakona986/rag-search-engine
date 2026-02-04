@@ -8,7 +8,16 @@ from search_utils import (
     format_search_results,
     load_movies
 )
+from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 
+load_dotenv()
+api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    raise RuntimeError ("No API key set")
+
+client = genai.Client(api_key=api_key)
 
 class HybridSearch:
     def __init__(self, documents):
@@ -147,10 +156,78 @@ def weighted_search_command(
     }
 
 def rrf_search_command(
-    query: str, k: int = 60, limit: int = DEFAULT_SEARCH_LIMIT
+    query: str, k: int = 60, limit: int = DEFAULT_SEARCH_LIMIT, enhance: str | None = None
 ) -> list[dict]:
     movies = load_movies()
     searcher = HybridSearch(movies)
+    match enhance:
+        case "spell":
+            messages = f"""Fix any spelling errors in this movie search query.
+
+                Only correct obvious typos. Don't change correctly spelled words.
+
+                Query: "{query}"
+
+                If no errors, return the original query. Do not capitalize any uncapitalized words.
+                """
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=messages,
+            )
+            print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
+            query = response.text
+        case "rewrite":
+            messages = f"""Rewrite this movie search query to be more specific and searchable.
+
+                Original: "{query}"
+
+                Consider:
+                - Common movie knowledge (famous actors, popular films)
+                - Genre conventions (horror = scary, animation = cartoon)
+                - Keep it concise (under 10 words)
+                - It should be a google style search query that's very specific
+                - Don't use boolean logic
+
+                Examples:
+
+                - "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
+                - "movie about bear in london with marmalade" -> "Paddington London marmalade"
+                - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
+
+                """
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=messages,
+            )
+            print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
+            query = response.text
+        case "expand":
+            messages = f"""Expand this movie search query to be more specific and searchable.
+
+                Original: "{query}"
+
+                Consider:
+                - Common movie knowledge (famous actors, popular films)
+                - Genre conventions (horror = scary, animation = cartoon)
+                - Keep it concise (under 10 words)
+                - It should be a google style search query that's very specific
+                - Don't use boolean logic
+
+                Examples:
+
+                - "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
+                - "movie about bear in london with marmalade" -> "Paddington London marmalade"
+                - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
+
+                """
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=messages,
+            )
+            print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
+            query = response.text
+        case _:
+            pass
     original_query = query
     search_limit = limit
     results = searcher.rrf_search(query, k, search_limit)

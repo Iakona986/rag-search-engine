@@ -35,6 +35,9 @@ def main() -> None:
     rrf_search_parser.add_argument(
         "--limit", type=int, default=5, help="Number of results to return"
     )
+    rrf_search_parser.add_argument(
+        "--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method",
+    )
     args = parser.parse_args()
 
     match args.command:
@@ -62,7 +65,7 @@ def main() -> None:
                 print(f"     {res['document'][:100]}")
                 print("")
         case "rrf-search":
-            results = rrf_search_command(args.query, args.k, args.limit)
+            results = rrf_search_command(args.query, args.k, args.limit, args.enhance)
             print(
                 f"RRF Hybrid Search Results: '{results['original_query']}' (k={results['k']}):"
             )

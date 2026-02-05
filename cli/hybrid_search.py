@@ -2,6 +2,7 @@ import os
 
 from keyword_search import InvertedIndex
 from semantic_search import ChunkedSemanticSearch
+from sentence_transformers import CrossEncoder
 from search_utils import (
     DEFAULT_ALPHA,
     DEFAULT_SEARCH_LIMIT,
@@ -11,6 +12,7 @@ from search_utils import (
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+import time
 
 load_dotenv()
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -41,10 +43,13 @@ class HybridSearch:
         combined = combine_search_results(bm25_results, semantic_results, alpha)
         return combined[:limit]      
 
-    def rrf_search(self, query, k, limit=10):
-        act_limit = limit * 500
+    def rrf_search(self, query, k, limit=10, rerank_method=None):
+        search_limit = limit * 5 if rerank_method else limit
+        act_limit = search_limit * 500
         bm25_results = self._bm25_search(query, act_limit)
         semantic_results = self.semantic_search.search_chunks(query, act_limit)
+        pairs = []
+        
         rrf_combined = {}
         for rank, res in enumerate(bm25_results, 1):
             doc_id = res['id']
@@ -69,7 +74,90 @@ class HybridSearch:
                     'semantic_rank': rank,
                     'rrf_score': score,
                 }
-        return sorted(rrf_combined.values(), key=lambda x: x['rrf_score'], reverse=True)[:limit]
+        results = sorted(rrf_combined.values(), key=lambda x: x['rrf_score'], reverse=True)[:search_limit]
+        if rerank_method == "individual":
+            print(f"Reranking top {search_limit} results using individual method...")
+            for doc in results:
+                doc['rerank_score'] = self.get_individual_score(query, doc)
+                time.sleep(3)
+            results = sorted(results, key=lambda x: x.get('rerank_score', 0), reverse=True)
+        elif rerank_method == "batch":
+            print(f"Reranking top {search_limit} results using batch method...")
+            doc_list_str = ""
+            for i, doc in enumerate(results, 1):
+                doc_list_str += f"{i}. {doc['title']} - {doc['document'][:100]}"
+            prompt = f"""Rank these movies by relevance to the search query.
+
+            Query: "{query}"
+
+            Movies:
+            {doc_list_str}
+
+            Return ONLY the IDs in order of relevance (best match first). Return a valid JSON list, nothing else. For example:
+
+            [75, 12, 34, 2, 1]
+            """
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            try:
+                clean_json = response.text.strip().replace("```json", "").replace("```", "")
+                reranked_ids = json.loads(clean_json)
+                rank_mapping = {int(doc_id): rank for rank, doc_id in enumerate(reranked_ids, 1)}
+                for i, doc in enumerate(results):
+                    doc['rerank_rank'] = rank.mapping.get(i, 999)
+                results.sort(key=lambda x: x.get('rerank_rank', 999))
+            except Exception as e:
+                print(f"Error parsing batch rerank JSON: {e}")
+        elif rerank_method == "cross_encoder":
+            print(f"Reranking top {search_limit} results using cross encoder method...")
+            pairs = []
+            for doc in results:
+                pairs.append([query, f"{doc.get('title', '')} - {doc.get('document', '')}"])
+            cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+            scores = cross_encoder.predict(pairs)
+            for i, score in enumerate(scores):
+                results[i]['cross_encoder_score'] = float(score)
+            results.sort(key=lambda x: x.get('cross_encoder_score', 0), reverse=True)
+        return results[:limit]
+    
+    def get_individual_score(self, query, doc):
+        prompt = f"""Rate how well this movie matches the search query.
+
+            Query: "{query}"
+            Movie: {doc.get("title", "")} - {doc.get("document", "")}
+
+            Consider:
+            - Direct relevance to query
+            - User intent (what they're looking for)
+            - Content appropriateness
+
+            Rate 0-10 (10 = perfect match).
+            Give me ONLY the number in your response, no other text or explanation.
+
+            Score:"""
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    safety_settings=[
+                        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                    ]
+                )          
+            )
+            if response.text:
+                score_str = response.text.strip()
+                return float(score_str)
+            print(f"Warning: No text returned for {doc.get('title')}. Likely blocked by safety filters.")
+            return 0.0
+        except Exception as e:
+            print(f"Error getting individual score: {e}")
+            return 0.0
 
 def normalize(scores: list[float]):
     normalized_scores = []
@@ -156,7 +244,7 @@ def weighted_search_command(
     }
 
 def rrf_search_command(
-    query: str, k: int = 60, limit: int = DEFAULT_SEARCH_LIMIT, enhance: str | None = None
+    query: str, k: int = 60, limit: int = DEFAULT_SEARCH_LIMIT, enhance: str | None = "", rerank: str | None = ""
 ) -> list[dict]:
     movies = load_movies()
     searcher = HybridSearch(movies)
@@ -174,6 +262,7 @@ def rrf_search_command(
                 model="gemini-2.5-flash",
                 contents=messages,
             )
+            time.sleep(3)
             print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
             query = response.text
         case "rewrite":
@@ -199,6 +288,7 @@ def rrf_search_command(
                 model="gemini-2.5-flash",
                 contents=messages,
             )
+            time.sleep(3)
             print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
             query = response.text
         case "expand":
@@ -224,13 +314,14 @@ def rrf_search_command(
                 model="gemini-2.5-flash",
                 contents=messages,
             )
+            time.sleep(3)
             print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
             query = response.text
         case _:
             pass
     original_query = query
     search_limit = limit
-    results = searcher.rrf_search(query, k, search_limit)
+    results = searcher.rrf_search(query, k, search_limit, rerank_method=rerank)
     return {
         "original_query": original_query,
         "k": k,

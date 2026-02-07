@@ -41,6 +41,9 @@ def main() -> None:
     rrf_search_parser.add_argument(
         "--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="Rerank method",
     )
+    rrf_search_parser.add_argument(
+        "--evaluate", action="store_true", help="Evaluate search results for relevance"
+    )
     args = parser.parse_args()
 
     match args.command:
@@ -68,29 +71,38 @@ def main() -> None:
                 print(f"     {res['document'][:100]}")
                 print("")
         case "rrf-search":
-            results = rrf_search_command(args.query, args.k, args.limit, args.enhance, args.rerank_method)
+            results = rrf_search_command(args.query, args.k, args.limit, args.enhance, args.rerank_method, args.evaluate)
+            movie_list = results['results']
             print(
                 f"RRF Hybrid Search Results: '{results['original_query']}' (k={results['k']}):"
-            )            
-            for i, res in enumerate(results['results'], 1):
-                print(
-                    f"{i}. {res['title']}" 
-                )
-                if args.rerank_method == "individual" and 'rerank_score' in res:
-                    print(f"    Rerank Score: {res['rerank_score']:.3f}/10")
-                elif args.rerank_method == "batch":
-                    print(f"   Rerank Rank: {res.get('rerank_rank', 'N/A')}")
-                elif args.rerank_method == "cross_encoder":
-                    print(f"   Cross Encoder Score: {res.get('cross_encoder_score', 0.0):.3f}")
-                print(f"RRF Score: {res['rrf_score']:.3f}")
-                bm_rank = res.get('bm25_rank', 'N/A')
-                sem_rank = res.get('semantic_rank', 'N/A')
-                if bm_rank != 'N/A' and sem_rank != 'N/A':
+            )
+            if args.evaluate and results.get('eval_scores'):
+                print("Final evaluation report:")
+                scores = results['eval_scores']
+                for i, res in enumerate(movie_list):
+                    score = scores[i] if i < len(scores) else 0
+                    print(f"{i+1}. {res['title']}: {score}/3")
+                    print("")            
+            else:
+                for i, res in enumerate(movie_list, 1):
                     print(
-                        f" BM25 Rank: {bm_rank}, Semantic Rank: {sem_rank}"
+                        f"{i}. {res['title']}" 
                     )
-                print(f"     {res['document'][:100]}")
-                print("")
+                    if args.rerank_method == "individual" and 'rerank_score' in res:
+                        print(f"    Rerank Score: {res['rerank_score']:.3f}/10")
+                    elif args.rerank_method == "batch":
+                        print(f"   Rerank Rank: {res.get('rerank_rank', 'N/A')}")
+                    elif args.rerank_method == "cross_encoder":
+                        print(f"   Cross Encoder Score: {res.get('cross_encoder_score', 0.0):.3f}")
+                    print(f"RRF Score: {res['rrf_score']:.3f}")
+                    bm_rank = res.get('bm25_rank', 'N/A')
+                    sem_rank = res.get('semantic_rank', 'N/A')
+                    if bm_rank != 'N/A' and sem_rank != 'N/A':
+                        print(
+                            f" BM25 Rank: {bm_rank}, Semantic Rank: {sem_rank}"
+                        )
+                    print(f"     {res['document'][:100]}")
+                    print("")
         case _:
             parser.print_help()
 

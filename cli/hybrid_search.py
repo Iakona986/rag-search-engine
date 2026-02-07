@@ -13,6 +13,14 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 import time
+import logging
+import json
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -49,7 +57,6 @@ class HybridSearch:
         bm25_results = self._bm25_search(query, act_limit)
         semantic_results = self.semantic_search.search_chunks(query, act_limit)
         pairs = []
-        
         rrf_combined = {}
         for rank, res in enumerate(bm25_results, 1):
             doc_id = res['id']
@@ -75,12 +82,14 @@ class HybridSearch:
                     'rrf_score': score,
                 }
         results = sorted(rrf_combined.values(), key=lambda x: x['rrf_score'], reverse=True)[:search_limit]
+        logger.debug(f"Results after RRF Search: {rrf_combined.values()}")
         if rerank_method == "individual":
             print(f"Reranking top {search_limit} results using individual method...")
             for doc in results:
                 doc['rerank_score'] = self.get_individual_score(query, doc)
                 time.sleep(3)
             results = sorted(results, key=lambda x: x.get('rerank_score', 0), reverse=True)
+            logger.debug(f"Results after Individual Reranking: {results}")
         elif rerank_method == "batch":
             print(f"Reranking top {search_limit} results using batch method...")
             doc_list_str = ""
@@ -108,6 +117,7 @@ class HybridSearch:
                 for i, doc in enumerate(results):
                     doc['rerank_rank'] = rank.mapping.get(i, 999)
                 results.sort(key=lambda x: x.get('rerank_rank', 999))
+                logger.debug(f"Results after Batch Reranking: {results}")
             except Exception as e:
                 print(f"Error parsing batch rerank JSON: {e}")
         elif rerank_method == "cross_encoder":
@@ -120,6 +130,7 @@ class HybridSearch:
             for i, score in enumerate(scores):
                 results[i]['cross_encoder_score'] = float(score)
             results.sort(key=lambda x: x.get('cross_encoder_score', 0), reverse=True)
+            logger.debug(f"Results after Cross-Encoder Reranking: {results}")
         return results[:limit]
     
     def get_individual_score(self, query, doc):
@@ -158,6 +169,43 @@ class HybridSearch:
         except Exception as e:
             print(f"Error getting individual score: {e}")
             return 0.0
+
+    def evaluate_results(self, query, results):
+        formatted_results = [
+            f"{i+1}. {result['title']} - {result['document'][:200]}"
+            for i, result in enumerate(results)
+        ]
+        prompt = f"""Rate how relevant each result is to this query on a 0-3 scale:
+
+                Query: "{query}"
+
+                Results:
+                {chr(10).join(formatted_results)}
+
+                Scale:
+                - 3: Highly relevant
+                - 2: Relevant
+                - 1: Marginally relevant
+                - 0: Not relevant
+
+                Do NOT give any numbers out than 0, 1, 2, or 3.
+
+                Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
+
+                [2, 0, 3, 2, 0, 1]"""
+            
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
+            clean_json = response.text.strip().replace("```json", "").replace("```", "")
+            scores = json.loads(clean_json)
+            return scores
+        except Exception as e:
+            print(f"Error evaluating results: {e}")
+            return None
+            
 
 def normalize(scores: list[float]):
     normalized_scores = []
@@ -244,10 +292,11 @@ def weighted_search_command(
     }
 
 def rrf_search_command(
-    query: str, k: int = 60, limit: int = DEFAULT_SEARCH_LIMIT, enhance: str | None = "", rerank: str | None = ""
+    query: str, k: int = 60, limit: int = DEFAULT_SEARCH_LIMIT, enhance: str | None = "", rerank: str | None = "", evaluate: bool = False
 ) -> list[dict]:
     movies = load_movies()
     searcher = HybridSearch(movies)
+    logger.debug(f"Original query: '{query}'")
     match enhance:
         case "spell":
             messages = f"""Fix any spelling errors in this movie search query.
@@ -263,7 +312,7 @@ def rrf_search_command(
                 contents=messages,
             )
             time.sleep(3)
-            print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
+            logger.debug(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'")
             query = response.text
         case "rewrite":
             messages = f"""Rewrite this movie search query to be more specific and searchable.
@@ -322,11 +371,15 @@ def rrf_search_command(
     original_query = query
     search_limit = limit
     results = searcher.rrf_search(query, k, search_limit, rerank_method=rerank)
+    eval_scores = []
+    if evaluate:
+        eval_scores = searcher.evaluate_results(query, results)
     return {
         "original_query": original_query,
         "k": k,
         "limit": limit,
         "results": results,
+        "eval_scores": eval_scores,
     }
     
 def rrf_score(rank: int, k: int = 60) -> float:

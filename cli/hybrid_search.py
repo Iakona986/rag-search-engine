@@ -7,11 +7,10 @@ from search_utils import (
     DEFAULT_ALPHA,
     DEFAULT_SEARCH_LIMIT,
     format_search_results,
-    load_movies
+    load_movies,
+    gemini_call,
+    gemini_call_no_safety,
 )
-from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 import time
 import logging
 import json
@@ -21,13 +20,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-load_dotenv()
-api_key = os.environ.get("GEMINI_API_KEY")
-if not api_key:
-    raise RuntimeError ("No API key set")
-
-client = genai.Client(api_key=api_key)
 
 class HybridSearch:
     def __init__(self, documents):
@@ -106,10 +98,7 @@ class HybridSearch:
 
             [75, 12, 34, 2, 1]
             """
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt
-            )
+            response = gemini_call(prompt)
             try:
                 clean_json = response.text.strip().replace("```json", "").replace("```", "")
                 reranked_ids = json.loads(clean_json)
@@ -149,18 +138,7 @@ class HybridSearch:
 
             Score:"""
         try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    safety_settings=[
-                        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
-                        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
-                        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
-                        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
-                    ]
-                )          
-            )
+            response = gemini_call_no_safety(prompt)
             if response.text:
                 score_str = response.text.strip()
                 return float(score_str)
@@ -195,17 +173,13 @@ class HybridSearch:
                 [2, 0, 3, 2, 0, 1]"""
             
         try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-            )
+            response = gemini_call(prompt)
             clean_json = response.text.strip().replace("```json", "").replace("```", "")
             scores = json.loads(clean_json)
             return scores
         except Exception as e:
             print(f"Error evaluating results: {e}")
             return None
-            
 
 def normalize(scores: list[float]):
     normalized_scores = []
@@ -307,10 +281,7 @@ def rrf_search_command(
 
                 If no errors, return the original query. Do not capitalize any uncapitalized words.
                 """
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=messages,
-            )
+            response = gemini_call(messages)
             time.sleep(3)
             logger.debug(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'")
             query = response.text
@@ -333,10 +304,7 @@ def rrf_search_command(
                 - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
 
                 """
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=messages,
-            )
+            response = gemini_call(messages)
             time.sleep(3)
             print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
             query = response.text
@@ -359,10 +327,7 @@ def rrf_search_command(
                 - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
 
                 """
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=messages,
-            )
+            response = gemini_call(messages)
             time.sleep(3)
             print(f"Enhanced query ({enhance}): '{query}' -> '{response.text}'\n")
             query = response.text

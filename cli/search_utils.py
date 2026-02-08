@@ -10,6 +10,8 @@ BM25_K1 = 1.5
 BM25_B = 0.75
 SCORE_PRECISION = 3
 DOCUMENT_PREVIEW_LENGTH = 100
+RRF_K = 60
+SEARCH_MULTIPLIER = 5
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 DATA_PATH = os.path.join(PROJECT_ROOT, "rag-search-engine", "data", "movies.json")
@@ -43,6 +45,21 @@ def gemini_call(prompt: str) -> str:
         model="gemini-2.5-flash",
         contents=prompt
     )
+    return response.text
+
+def gemini_call_no_safety(prompt: str) -> str:
+    response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    safety_settings=[
+                        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                    ]
+                )          
+            )
     return response.text
 
 def format_search_results(

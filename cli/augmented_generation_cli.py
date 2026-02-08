@@ -1,6 +1,5 @@
 import argparse
-from search_utils import load_movies, gemini_call
-from hybrid_search import HybridSearch
+from augmented_generation import *
 
 def main():
     parser = argparse.ArgumentParser(description="Retrieval Augmented Generation CLI")
@@ -9,33 +8,79 @@ def main():
     rag_parser = subparsers.add_parser(
         "rag", help="Perform RAG (search + generate answer)"
     )
-    rag_parser.add_argument("query", type=str, help="Search query for RAG")
+    rag_parser.add_argument(
+        "query", type=str, help="Search query for RAG"
+    )
+
+    summarize_parser = subparsers.add_parser(
+        "summarize", help="Use LLM to generate a summary of the documents pulled from the search."
+    )
+    summarize_parser.add_argument(
+        "query", type=str, help="Search query for summary"
+    )
+    summarize_parser.add_argument(
+         "--limit", type=int, default=5, help="Number of documents to retrieve"
+    )
+
+    citations_parser = subparsers.add_parser(
+        "citations", help="Use LLM to generate a cited information on the answers to the query."
+    )   
+    citations_parser.add_argument(
+        "query", type=str, help="Search query for citation"
+    )
+    citations_parser.add_argument(
+        "--limit", type=int, default=5, help="Number of documents to retrieve"
+    )
+
+    question_parser = subparsers.add_parser(
+        "question", help="Use LLM to answer a question based on the documents pulled from the search."
+    )
+    question_parser.add_argument(
+        "query", type=str, help="Search query for question"
+    )
+    question_parser.add_argument(
+        "--limit", type=int, default=5, help="Number of documents to retrieve"
+    )
 
     args = parser.parse_args()
 
     match args.command:
         case "rag":
-            query = args.query
-            movies = load_movies()
-            searcher = HybridSearch(movies)
-            movies_list = searcher.rrf_search(query)
-            context_docs = "\n".join([f"- {m['title']}: {m['document']}" for m in movies_list])
-            prompt = f"""Answer the question or provide information based on the provided documents. This should be tailored to Hoopla users. Hoopla is a movie streaming service.
-
-                Query: {query}
-
-                Documents:
-                {context_docs}
-
-                Provide a comprehensive answer that addresses the query:"""
-            answer = gemini_call(prompt)
+            movies_list, answer = rag_command(args.query)
             print("Search Results:")
             for res in movies_list:
                 print(f"    - {res['title']}")
-            print("\n")
+            print()
             print("RAG Response:")
             print(answer)
-            print("\n")            
+            print()
+        case "summarize":
+            results, summary = summarize_command(args.query, args.limit)
+            print("Search Results:")
+            for res in results:
+                print(f"    - {res['title']}")
+            print()
+            print("LLM Summary:")
+            print(summary)
+            print()
+        case "citations":
+            results, answer = citations_command(args.query, args.limit)
+            print("Search Results:")
+            for res in results:
+                print(f"    - {res['title']}")
+            print()
+            print("LLM Answer:")
+            print(answer)
+            print()
+        case "question":
+            results, answer = question_command(args.query, args.limit)
+            print("Search Results:")
+            for res in results:
+                print(f"    - {res['title']}")
+            print()
+            print("LLM Answer:")
+            print(answer)
+            print()
         case _:
             parser.print_help()
 

@@ -51,7 +51,7 @@ class HybridSearch:
         combined = combine_search_results(bm25_results, semantic_results, alpha)
         return combined[:limit]      
 
-    def rrf_search(self, query, k, limit=10, rerank_method=None):
+    def rrf_search(self, query, k=60, limit=5, rerank_method=None):
         search_limit = limit * 5 if rerank_method else limit
         act_limit = search_limit * 500
         bm25_results = self._bm25_search(query, act_limit)

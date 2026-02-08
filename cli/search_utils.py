@@ -1,5 +1,8 @@
 import json
 import os
+from google import genai
+from google.genai import types
+from dotenv import load_dotenv
 
 DEFAULT_SEARCH_LIMIT = 5
 DEFAULT_ALPHA = 0.5
@@ -14,6 +17,12 @@ STOPWORDS_PATH = os.path.join(PROJECT_ROOT, "rag-search-engine", "data", "stopwo
 
 CACHE_DIR = os.path.join(PROJECT_ROOT, "rag-search-engine", "cache")
 
+load_dotenv()
+api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    raise RuntimeError ("No API key set")
+
+client = genai.Client(api_key=api_key)
 
 def load_movies() -> list[dict]:
     with open(DATA_PATH, "r") as f:
@@ -28,6 +37,13 @@ def load_golden() -> list[dict]:
 def load_stopwords() -> list[str]:
     with open(STOPWORDS_PATH, "r") as f:
         return f.read().splitlines()
+
+def gemini_call(prompt: str) -> str:
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    return response.text
 
 def format_search_results(
     doc_id: str, title: str, document: str, score: float, **metadata: Any

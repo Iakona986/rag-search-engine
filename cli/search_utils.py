@@ -3,6 +3,9 @@ import os
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+import mimetypes
+from PIL import Image
+from sentence_transformers import SentenceTransformer
 
 DEFAULT_SEARCH_LIMIT = 5
 DEFAULT_ALPHA = 0.5
@@ -25,6 +28,8 @@ if not api_key:
     raise RuntimeError ("No API key set")
 
 client = genai.Client(api_key=api_key)
+
+model = SentenceTransformer("clip-ViT-B-32")
 
 def load_movies() -> list[dict]:
     with open(DATA_PATH, "r") as f:
@@ -61,6 +66,22 @@ def gemini_call_no_safety(prompt: str) -> str:
                 )          
             )
     return response.text
+
+def gemini_image_call(prompt: str, image_path: str, query: str) -> str:
+    mime, _ = mimetypes.guess_type(image_path)
+    mime = mime or "image/jpeg"
+    parts = [
+        prompt,
+        types.Part.from_bytes(data=open(image_path, "rb").read(), mime_type=mime),
+        query.strip(),
+    ]
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=parts
+    )
+    return response
+
+
 
 def format_search_results(
     doc_id: str, title: str, document: str, score: float, **metadata: Any

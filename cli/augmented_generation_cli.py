@@ -23,7 +23,7 @@ def main():
     )
 
     citations_parser = subparsers.add_parser(
-        "citations", help="Use LLM to generate a cited information on the answers to the query."
+        "citations", help="Use LLM to generate a cited response to the query."
     )   
     citations_parser.add_argument(
         "query", type=str, help="Search query for citation"
